@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="debug">
+    <Appenders>
+        <RollingRandomAccessFile name="agent" filePattern="logs_test/agent/moleAgent.%d{yyyy-MM-dd}_%i.log">
+            <PatternLayout pattern="%d %-5p [%t] %C{2} (%F:%L) - %m%n"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10 MB"/>
+            </Policies>
+        </RollingRandomAccessFile>
+
+        <RollingRandomAccessFile name="mole.tracer" filePattern="logs_test/trace/trace.%d{yyyy-MM-dd}_%i.log">
+            <PatternLayout pattern="%m%n" charset="UTF-8"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10 MB"/>
+            </Policies>
+        </RollingRandomAccessFile>
+
+        <Async name="tracer">
+            <AppenderRef ref="mole.tracer"/>
+        </Async>
+        <Async name="agent">
+            <AppenderRef ref="mole.agent"/>
+        </Async>
+    </Appenders>
+    <Loggers>
+        <Logger name="org.mole.tracer.watcher.WatcherMediator" level="info">
+            <AppenderRef ref="tracer"/>
+        </Logger>
+        <Logger name="org.mole.tracer.utils.SimpleLoggerManager" level="debug">
+            <AppenderRef ref="agent"/>
+        </Logger>
+    </Loggers>
+</Configuration>

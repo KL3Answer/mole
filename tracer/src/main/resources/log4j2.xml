@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="debug">
+
+    <properties>
+        <Property name="log_path">${sys:log.dir}</Property>
+    </properties>
+
+    <Appenders>
+        <!--agent log-->
+        <RollingRandomAccessFile name="mole.agent"
+                                 fileName="${log_path}/logs/agent/moleAgent.log"
+                                 filePattern="${log_path}/logs/agent/moleAgent.%d{yyyy-MM-dd}_%i.log">
+            <PatternLayout pattern="%d %-5p [%t] %C{2} (%F:%L) - %m%n"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10 MB"/>
+            </Policies>
+        </RollingRandomAccessFile>
+        <!--app log-->
+        <RollingRandomAccessFile name="mole.tracer" immediateFlush="false"
+                                 fileName="${log_path}/logs/trace/trace.log"
+                                 filePattern="${log_path}/logs/trace/trace.%d{yyyy-MM-dd}_%i.log">
+            <PatternLayout pattern="%m%n" charset="UTF-8"/>
+            <Policies>
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <SizeBasedTriggeringPolicy size="10 MB"/>
+            </Policies>
+        </RollingRandomAccessFile>
+
+    </Appenders>
+    <Loggers>
+        <Logger name="org.mole.tracer.watcher.WatcherMediator" level="info" additivity="false">
+            <AppenderRef ref="mole.tracer"/>
+        </Logger>
+        <Logger name="org.mole.tracer.utils.SimpleLoggerManager" level="debug">
+            <AppenderRef ref="mole.agent"/>
+        </Logger>
+    </Loggers>
+</Configuration>
+
