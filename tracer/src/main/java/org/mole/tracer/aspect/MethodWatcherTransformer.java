@@ -56,17 +56,6 @@ public class MethodWatcherTransformer implements ClassFileTransformer {
                 bos.write(bytes);
                 bos.flush();
 
-                //todo optimize
-//                PackManager.v().getPack("wjtp").add();
-//                soot.Main.main(new String[]{
-//                        "-w",
-//                        "-f", "J",
-//                        "-p", "cg.spark", "enabled:true",
-//                        "-p", "wjtp.myapp", "enabled:true",
-//                        "-soot-class-path", String.join(File.pathSeparator, classpath),
-//                        args[1]
-//                });
-
 
                 return bytes;
 

@@ -17,6 +17,7 @@ public class KCPServerConsumer {
         s.setTimeout(10 * 1000);
         s.setMtu(512);
         s.start();
+        System.out.println("KCP Server started....");
     }
 
 }

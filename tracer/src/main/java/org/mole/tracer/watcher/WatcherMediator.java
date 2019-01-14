@@ -1,5 +1,7 @@
 package org.mole.tracer.watcher;
 
+import internal.io.netty.buffer.ByteBuf;
+import internal.io.netty.buffer.PooledByteBufAllocator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.mole.tracer.consumer.kcp.KcpClient;
@@ -195,17 +197,17 @@ public enum WatcherMediator {
             final String rs = sb.toString();
 
 ////            //send or write to disk
-//            if (kcpClient != null && kcpClient.isRunning()) {
-//                ByteBuf bb = PooledByteBufAllocator.DEFAULT.buffer(1500);
-//                for (int i = 0; i < rs.length(); i++) {
-//                    bb.writeChar(rs.charAt(i));
-//                }
-//                if (!kcpClient.send(bb)) {
-//                    LOGGER.info(rs);
-//                }
-//            } else {
-//                LOGGER.info(rs);
-//            }
+            if (kcpClient != null && kcpClient.isRunning()) {
+                ByteBuf bb = PooledByteBufAllocator.DEFAULT.buffer(1500);
+                for (int i = 0; i < rs.length(); i++) {
+                    bb.writeChar(rs.charAt(i));
+                }
+                if (!kcpClient.send(bb)) {
+                    LOGGER.info(rs);
+                }
+            } else {
+                LOGGER.info(rs);
+            }
         } catch (Throwable e) {
             SimpleLoggerManager.logFullStackTrace(e);
         }

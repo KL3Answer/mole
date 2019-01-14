@@ -25,9 +25,9 @@ tracer:
       log:
         dir: /home/k3a/Downloads
       # use kcp
-#      kcp:
-#        host: localhost
-#        port: 2222
+      kcp:
+        host: localhost
+        port: 2222
     # helper class must implement org.mole.tracer.plugins.TraceHelper(this class is used to generate trace id and span id)
     helperClass: org.k3a.TestTraceHelper
     # define watched methods by setting class name(you can also define watched methods by setting annotation,when names and annotation are both set,names will be used)

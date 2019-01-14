@@ -15,7 +15,7 @@
  */
 package internal.io.netty.util.internal.logging;
 
-import internal.org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.Logger;
 
 final class Log4J2Logger extends AbstractInternalLogger {
 
