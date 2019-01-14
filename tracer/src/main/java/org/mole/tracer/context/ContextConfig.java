@@ -28,15 +28,18 @@ public class ContextConfig {
 
     // simple access, do not change those value outside this class!
     public int _rate;
-    public String _separator;
     public boolean _async;
     public String _helperClass;
 
+    private String _separator;
+    private String _argsSeparator;
 
     private Set<String> watchedMethods;
     private List<String> extra;
     //key -> ,value -> left trace class name,right span class name
     public Map<String, P<String, String>> genS;
+    //  1 -> log 2 -> kcp  3 -> log and kcp
+    public int _recordMode;
 
     public ContextConfig(Path path) throws InterruptedException {
         Objects.requireNonNull(path, "dynamically can not be null");
@@ -57,7 +60,7 @@ public class ContextConfig {
         final Map<String, Object> config = swap(path);
 
         //log dir
-        final String logDir = getStringFromMap(config, tracer.name(), watcher.name(), log.name(), dir.name());
+        final String logDir = getStringFromMap(config, tracer.name(), watcher.name(), recordMode.name(), log.name(), dir.name());
         if (SimpleStringUtils.isNotBlank(logDir)) {
             System.setProperty("log.dir", logDir);
         } else {
@@ -85,6 +88,7 @@ public class ContextConfig {
         }
         this.extra = extras;
 
+        // trace span generator
         final Map<String, P<String, String>> genS = new HashMap<>();
         for (Map.Entry<String, Object> entry : methods.entrySet()) {
             //noinspection unchecked
@@ -92,6 +96,21 @@ public class ContextConfig {
             genS.put(entry.getKey(), new P<String, String>(methodConf.get(traceClass.name()), methodConf.get(spanClass.name())));
         }
         this.genS = genS;
+
+        //_recordMode
+        //todo handle kcp argus
+        final Map<String, Object> recordMode = getMapFromMap(config, tracer.name(), watcher.name(), ConfigKey.recordMode.name());
+        if (recordMode == null || !recordMode.containsKey(log.name())) {
+            throw new IllegalArgumentException("recordMode can not be null");
+        } else if (recordMode.containsKey(kcp.name())) {
+            this._recordMode = 3;//open kcp and log
+        } else {
+            this._recordMode = 1;//open log
+        }
+
+        //_separator
+        this._separator = getStringFromMap(config, tracer.name(), watcher.name(), separator.name());
+        this._argsSeparator = getStringFromMap(config, tracer.name(), watcher.name(), argsSeparator.name());
     }
 
     /**
@@ -107,18 +126,12 @@ public class ContextConfig {
         } else {
             this._rate = Integer.parseInt(_rate);
         }
-        //_separator
-        this._separator = getStringFromMap(config, tracer.name(), watcher.name(), separator.name());
 
         //sync or _async record
         this._async = Boolean.getBoolean(getStringFromMap(config, tracer.name(), watcher.name(), async.name()));
 
         //helper class
         this._helperClass = getStringFromMap(config, tracer.name(), watcher.name(), helperClass.name());
-
-        //recordMode
-        final String rMode = getStringFromMap(config, tracer.name(), watcher.name(), recordMode.name());
-        //todo add kcp support
 
         return config;
     }
@@ -193,14 +206,26 @@ public class ContextConfig {
         return genS;
     }
 
+    public int getRecordMode() {
+        return _recordMode;
+    }
+
+    public String get_separator() {
+        return _separator;
+    }
+
+    public String get_argsSeparator() {
+        return _argsSeparator;
+    }
+
     public enum ConfigKey {
         tracer, sampler, rate, watcher, async, separator, names, traceClass,
         spanClass, annotation, method, trace, span, recordField, helperClass,
-        recordMode, log, dir
+        recordMode, log, dir, kcp, argsSeparator
     }
 
     public enum ConfigValue {
-        methodName, methodDesc, currentThread, currentTimeMills, traceId, spanId, methodArgs
+        methodName, methodDesc, currentThread, currentTimeMills, traceId, spanId, duration, methodArgs
     }
 
 }

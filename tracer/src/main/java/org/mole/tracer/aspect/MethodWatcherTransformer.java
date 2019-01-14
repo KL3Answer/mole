@@ -6,6 +6,8 @@ import org.mole.tracer.utils.SimpleLoggerManager;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 
+import java.io.BufferedOutputStream;
+import java.io.FileOutputStream;
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
 import java.util.Map;
@@ -49,7 +51,25 @@ public class MethodWatcherTransformer implements ClassFileTransformer {
 
                 SimpleLoggerManager.info("insert tracer into class :" + className);
 
-                return cw.toByteArray();
+                final byte[] bytes = cw.toByteArray();
+                final BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream("/home/k3a/Downloads/test.class"));
+                bos.write(bytes);
+                bos.flush();
+
+                //todo optimize
+//                PackManager.v().getPack("wjtp").add();
+//                soot.Main.main(new String[]{
+//                        "-w",
+//                        "-f", "J",
+//                        "-p", "cg.spark", "enabled:true",
+//                        "-p", "wjtp.myapp", "enabled:true",
+//                        "-soot-class-path", String.join(File.pathSeparator, classpath),
+//                        args[1]
+//                });
+
+
+                return bytes;
+
             } catch (Throwable e) {
                 SimpleLoggerManager.logFullStackTrace(e);
             }

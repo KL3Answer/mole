@@ -26,7 +26,7 @@ public class WatcherClassVisitor extends ClassVisitor {
     private static final String NEED_PROFILE_DESC = "()Z";
 
     private static final String DO_PROFILER = "doRecord";
-    private static final String DO_PROFILER_DESC = "([Ljava/lang/Object;Ljava/lang/Object;)V";
+    private static final String DO_PROFILER_DESC = "([Ljava/lang/Object;)V";
 
     private static final String GEN_TRACE_ID = "genTraceId";
     private static final String GEN_TRACE_ID_DESC = "(Ljava/lang/Object;)Ljava/lang/String;";
@@ -156,6 +156,7 @@ public class WatcherClassVisitor extends ClassVisitor {
 //            final Label start = new Label();
 //            mv.visitLabel(start);
 
+            //todo  use single array to carry extraInfo and method args
             //insert check rate
             mv.visitMethodInsn(INVOKESTATIC, MEDIATOR_NAME, NEED_PROFILE, NEED_PROFILE_DESC, false);
             Label L_goon = new Label();
@@ -165,10 +166,7 @@ public class WatcherClassVisitor extends ClassVisitor {
             final int offset = (access & ACC_STATIC) != 0 ? 0 : 1;
 
             //add extra info
-            addExtraInfoIfNeeded(mv, name, desc, argDesc, offset);
-
-            //add method args
-            packMethodArgs(mv, access, argDesc, offset);
+            addExtraInfoIfNeeded(mv, access, name, desc, argDesc, offset);
 
             //insert profile
             mv.visitMethodInsn(INVOKESTATIC, MEDIATOR_NAME, DO_PROFILER, DO_PROFILER_DESC, false);
@@ -198,7 +196,7 @@ public class WatcherClassVisitor extends ClassVisitor {
     /**
      *
      */
-    private void addExtraInfoIfNeeded(final MethodVisitor mv, final String name, final String desc, final String[] descArr, int offset) {
+    private void addExtraInfoIfNeeded(final MethodVisitor mv, int access, final String name, final String desc, final String[] descArr, int offset) {
         if (recordField != null && !recordField.isEmpty()) {
             //new Object array
             mv.visitIntInsn(BIPUSH, ContextConfig.CONFIG_VALUES.size());
@@ -261,7 +259,45 @@ public class WatcherClassVisitor extends ClassVisitor {
                         if (traceIndex >= 0) {
                             mv.visitInsn(DUP);
                             mv.visitInsn(ICONST_4);
-                            mv.visitIntInsn(ALOAD, traceIndex);
+                            //handle primitive type
+                            switch (SimpleMethod.fromType2Desc(traceClass)) {
+                                case "Z":
+                                    mv.visitIntInsn(ILOAD, traceIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, BOOLEAN_NAME, BOOLEAN_VALUE_OF, BOOLEAN_VALUE_OF_DESC, false);
+                                    break;
+                                case "B":
+                                    mv.visitIntInsn(ILOAD, traceIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, BYTE_NAME, BYTE_VALUE_OF, BYTE_VALUE_OF_DESC, false);
+                                    break;
+                                case "S":
+                                    mv.visitIntInsn(ILOAD, traceIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, SHORT_NAME, SHORT_VALUE_OF, SHORT_VALUE_OF_DESC, false);
+                                    break;
+                                case "I":
+                                    mv.visitIntInsn(ILOAD, traceIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, INTEGER_NAME, INTEGER_VALUE_OF, INTEGER_VALUE_OF_DESC, false);
+                                    break;
+                                case "F":
+                                    mv.visitIntInsn(FLOAD, traceIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, FLOAT_NAME, FLOAT_VALUE_OF, FLOAT_VALUE_OF_DESC, false);
+                                    break;
+                                case "C":
+                                    mv.visitIntInsn(ILOAD, traceIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, CHARACTER_NAME, CHARACTER_VALUE_OF, CHARACTER_VALUE_OF_DESC, false);
+                                    break;
+                                case "J":
+                                    mv.visitIntInsn(LLOAD, traceIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, LONG_NAME, LONG_VALUE_OF, LONG_VALUE_OF_DESC, false);
+                                    break;
+                                case "D":
+                                    mv.visitIntInsn(DLOAD, traceIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, DOUBLE_NAME, DOUBLE_VALUE_OF, DOUBLE_VALUE_OF_DESC, false);
+                                    break;
+                                default:
+                                    mv.visitIntInsn(ALOAD, traceIndex);
+                                    break;
+                            }
+
                             mv.visitMethodInsn(INVOKESTATIC, MEDIATOR_NAME, GEN_TRACE_ID, GEN_TRACE_ID_DESC, false);
                             mv.visitInsn(AASTORE);
                         }
@@ -271,10 +307,61 @@ public class WatcherClassVisitor extends ClassVisitor {
                         if (spanIndex >= 0) {
                             mv.visitInsn(DUP);
                             mv.visitInsn(ICONST_5);
-                            mv.visitIntInsn(ALOAD, spanIndex);
+                            //handle primitive type
+                            switch (SimpleMethod.fromType2Desc(spanClass)) {
+                                case "Z":
+                                    mv.visitIntInsn(ILOAD, spanIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, BOOLEAN_NAME, BOOLEAN_VALUE_OF, BOOLEAN_VALUE_OF_DESC, false);
+                                    break;
+                                case "B":
+                                    mv.visitIntInsn(ILOAD, spanIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, BYTE_NAME, BYTE_VALUE_OF, BYTE_VALUE_OF_DESC, false);
+                                    break;
+                                case "S":
+                                    mv.visitIntInsn(ILOAD, spanIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, SHORT_NAME, SHORT_VALUE_OF, SHORT_VALUE_OF_DESC, false);
+                                    break;
+                                case "I":
+                                    mv.visitIntInsn(ILOAD, spanIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, INTEGER_NAME, INTEGER_VALUE_OF, INTEGER_VALUE_OF_DESC, false);
+                                    break;
+                                case "F":
+                                    mv.visitIntInsn(FLOAD, spanIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, FLOAT_NAME, FLOAT_VALUE_OF, FLOAT_VALUE_OF_DESC, false);
+                                    break;
+                                case "C":
+                                    mv.visitIntInsn(ILOAD, spanIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, CHARACTER_NAME, CHARACTER_VALUE_OF, CHARACTER_VALUE_OF_DESC, false);
+                                    break;
+                                case "J":
+                                    mv.visitIntInsn(LLOAD, spanIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, LONG_NAME, LONG_VALUE_OF, LONG_VALUE_OF_DESC, false);
+                                    break;
+                                case "D":
+                                    mv.visitIntInsn(DLOAD, spanIndex);
+                                    mv.visitMethodInsn(INVOKESTATIC, DOUBLE_NAME, DOUBLE_VALUE_OF, DOUBLE_VALUE_OF_DESC, false);
+                                    break;
+                                default:
+                                    mv.visitIntInsn(ALOAD, spanIndex);
+                                    break;
+                            }
                             mv.visitMethodInsn(INVOKESTATIC, MEDIATOR_NAME, GEN_SPAN_ID, GEN_SPAN_ID_DESC, false);
                             mv.visitInsn(AASTORE);
                         }
+                        break;
+                    case duration://duration 6
+                        break;
+                    case methodArgs:
+                        //todo handle config
+                        //handle varargs methods
+                        mv.visitInsn(DUP);
+                        mv.visitIntInsn(BIPUSH,7);
+                        if (descArr.length == 1 && (access & ACC_VARARGS) != 0) {
+                            mv.visitVarInsn(ALOAD, offset);
+                        } else {
+                            packAsArray(mv, descArr, offset);
+                        }
+                        mv.visitInsn(AASTORE);
                         break;
                     default:
                         break;
@@ -289,7 +376,6 @@ public class WatcherClassVisitor extends ClassVisitor {
      *
      */
     private void packMethodArgs(final MethodVisitor mv, final int access, final String[] args, final int offset) {
-        //todo handle config
         //handle varargs methods
         if (args.length == 1 && (access & ACC_VARARGS) != 0) {
             mv.visitVarInsn(ALOAD, offset);

@@ -2,6 +2,7 @@ package org.k3a;
 
 import org.mole.tracer.plugins.TraceHelper;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -22,7 +23,14 @@ public class TestTraceHelper implements TraceHelper {
     @Override
     public String genSpanId(Object object) {
         if (object instanceof Map) {
-            return ((Map) object).get("span").toString();
+            return ((Map) object).get("spanId").toString();
+        } else if (object instanceof List) {
+            final Object o = ((List) object).get(0);
+            if(o instanceof  Map){
+                return ((Map) o).get("spanId").toString();
+            }else {
+                return o.toString();
+            }
         } else {
             return object.toString();
         }

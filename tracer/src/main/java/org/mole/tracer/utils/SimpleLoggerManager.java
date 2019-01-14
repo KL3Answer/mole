@@ -12,7 +12,18 @@ public enum SimpleLoggerManager {
 
     INSTANCE;
 
-    private static final Logger LOGGER = LogManager.getLogger(SimpleLoggerManager.class);
+    //    private static final Logger LOGGER = LogManager.getLogger(SimpleLoggerManager.class);
+    private static  Logger LOGGER;
+
+    static {
+        try {
+
+            LOGGER = LogManager.getLogger(SimpleLoggerManager.class);
+        } catch (Exception e) {
+//            LOGGER = null;
+            e.printStackTrace();
+        }
+    }
 
     public static void info(String msg) {
         LOGGER.info(msg);

@@ -2,13 +2,18 @@ package org.mole.tracer.watcher;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.mole.tracer.consumer.kcp.KcpClient;
+import org.mole.tracer.consumer.kcp.TracerKCPClient;
 import org.mole.tracer.context.TracerContext;
 import org.mole.tracer.plugins.TraceHelper;
 import org.mole.tracer.utils.SimpleLoggerManager;
 
+import java.net.InetSocketAddress;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.mole.tracer.context.ContextConfig.ConfigValue.methodArgs;
 
 /**
  * Created by k3a
@@ -26,6 +31,12 @@ public enum WatcherMediator {
 
     private static final Logger LOGGER = LogManager.getLogger(WatcherMediator.class);
 
+    private static final ThreadLocal<StringBuilder> SBTL = ThreadLocal.withInitial(StringBuilder::new);
+
+    private static KcpClient kcpClient;
+
+    private static String separator;
+    private static String argsSeparator;
 
     public static void init(TracerContext _context) {
         if (!isInit.compareAndSet(false, true)) {
@@ -34,12 +45,29 @@ public enum WatcherMediator {
         Objects.requireNonNull(_context, "context can not be null");
         context = _context;
 
+        if ((context.config.getRecordMode() & 2) != 0) {
+            // todo multi collector node
+            kcpClient = new TracerKCPClient();
+            kcpClient.noDelay(1, 20, 2, 1);
+            kcpClient.setMinRto(10);
+            kcpClient.wndSize(32, 32);
+            kcpClient.setTimeout(10 * 1000);
+            kcpClient.setMtu(1400);
+            //todo handle args
+            kcpClient.connect(new InetSocketAddress("localhost", 2222));
+            kcpClient.start();
+        }
+
         try {
             final Class<?> clazz = Class.forName(_context.config._helperClass);
             traceHelper = (TraceHelper) clazz.newInstance();
         } catch (Exception e) {
             SimpleLoggerManager.logFullStackTrace(e);
         }
+
+        //separators
+        separator = _context.config.get_separator();
+        argsSeparator = _context.config.get_argsSeparator();
 
     }
 
@@ -67,10 +95,9 @@ public enum WatcherMediator {
      * <p>
      * <p>
      * extra format:
-     * String       String        Thread           Long         String String
-     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     * | methodName | methodDesc | currentThread| currentTimeMills | trace | span |
-     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     * | methodName(String) | methodDesc(String) | currentThread(Thread)| currentTimeMills(Long) | trace(Object) | span(Object) |duration(Long,not finished)|method args(Object) |
+     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      * <p>
      * args format:
      * <p>
@@ -79,9 +106,8 @@ public enum WatcherMediator {
      * when args is a primitive type array ,the watched method is vararg and receive primitive type args
      */
     @SuppressWarnings("unused")
-    public static void doRecord(Object extra[], Object args) {
+    public static void doRecord(Object extra[]) {
         try {
-            final String separator = context.config._separator;
 
             final StringBuilder sb = new StringBuilder();
             // handle extra
@@ -106,60 +132,80 @@ public enum WatcherMediator {
                             break;
                         case 4://traceId
                         case 5://spanId
-                            sb.append(extra[i]).append(separator);
+                            if (extra[i] != null) {
+                                sb.append(extra[i]).append(separator);
+                            }
                             break;
-                        //todo handle duration
+                        case 6://duration
+                            //todo handle duration
+                            sb.append(separator);
+                            break;
+                        case 7:
+                            if (!context.config.getExtra().contains(methodArgs.name())) {
+                                continue;
+                            }
+                            //handle method args
+                            final Object args = extra[i];
+                            if (args == null) {
+                                sb.append("null").append(separator);
+                            } else if (args instanceof Object[]) {
+                                for (int j = 0; j < ((Object[]) args).length; j++) {
+                                    sb.append(((Object[]) args)[j]).append(argsSeparator);
+                                }
+                            } else if (args instanceof boolean[]) {
+                                for (int j = 0; j < ((boolean[]) args).length; j++) {
+                                    sb.append(Boolean.toString(((boolean[]) args)[j])).append(argsSeparator);
+                                }
+                            } else if (args instanceof byte[]) {
+                                for (int j = 0; j < ((byte[]) args).length; j++) {
+                                    sb.append(Integer.toString(((byte[]) args)[j])).append(argsSeparator);
+                                }
+                            } else if (args instanceof short[]) {
+                                for (int j = 0; j < ((short[]) args).length; j++) {
+                                    sb.append(Integer.toString(((byte[]) args)[j])).append(argsSeparator);
+                                }
+                            } else if (args instanceof int[]) {
+                                for (int j = 0; j < ((int[]) args).length; j++) {
+                                    sb.append(Integer.toString(((int[]) args)[j])).append(argsSeparator);
+                                }
+                            } else if (args instanceof char[]) {
+                                for (int j = 0; j < ((char[]) args).length; j++) {
+                                    sb.append(((char[]) args)[j]).append(argsSeparator);
+                                }
+                            } else if (args instanceof float[]) {
+                                for (int j = 0; j < ((float[]) args).length; j++) {
+                                    sb.append(String.valueOf(((float[]) args)[j])).append(argsSeparator);
+                                }
+                            } else if (args instanceof long[]) {
+                                for (int j = 0; j < ((long[]) args).length; j++) {
+                                    sb.append(Long.toString(((long[]) args)[j])).append(argsSeparator);
+                                }
+                            } else if (args instanceof double[]) {
+                                for (int j = 0; j < ((double[]) args).length; j++) {
+                                    sb.append(Double.toString(((double[]) args)[j])).append(argsSeparator);
+                                }
+                            } else {
+                                sb.append(args).append(separator);
+                            }
+                            break;
                     }
                 }
             }
 
-            // use an extra _separator to separate extra info and method args
-            sb.append(separator);
+            final String rs = sb.toString();
 
-            //handle method args
-            if (args == null) {
-                sb.append("null").append(separator);
-            } else if (args instanceof Object[]) {
-                for (int i = 0; i < ((Object[]) args).length; i++) {
-                    sb.append(String.valueOf(((Object[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof boolean[]) {
-                for (int i = 0; i < ((boolean[]) args).length; i++) {
-                    sb.append(String.valueOf(((boolean[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof byte[]) {
-                for (int i = 0; i < ((byte[]) args).length; i++) {
-                    sb.append(String.valueOf(((byte[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof short[]) {
-                for (int i = 0; i < ((short[]) args).length; i++) {
-                    sb.append(String.valueOf(((short[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof int[]) {
-                for (int i = 0; i < ((int[]) args).length; i++) {
-                    sb.append(String.valueOf(((int[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof char[]) {
-                for (int i = 0; i < ((char[]) args).length; i++) {
-                    sb.append(String.valueOf(((char[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof float[]) {
-                for (int i = 0; i < ((float[]) args).length; i++) {
-                    sb.append(String.valueOf(((float[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof long[]) {
-                for (int i = 0; i < ((long[]) args).length; i++) {
-                    sb.append(String.valueOf(((long[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof double[]) {
-                for (int i = 0; i < ((double[]) args).length; i++) {
-                    sb.append(String.valueOf(((double[]) args)[i])).append(separator);
-                }
-            } else {
-                sb.append(args).append(separator);
-            }
-            //send or write to disk
-            LOGGER.info(sb.toString());
+////            //send or write to disk
+//            if (kcpClient != null && kcpClient.isRunning()) {
+//                ByteBuf bb = PooledByteBufAllocator.DEFAULT.buffer(1500);
+//                for (int i = 0; i < rs.length(); i++) {
+//                    bb.writeChar(rs.charAt(i));
+//                }
+//                if (!kcpClient.send(bb)) {
+//                    LOGGER.info(rs);
+//                }
+//            } else {
+//                LOGGER.info(rs);
+//            }
         } catch (Throwable e) {
             SimpleLoggerManager.logFullStackTrace(e);
         }
