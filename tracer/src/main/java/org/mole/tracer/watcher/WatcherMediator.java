@@ -1,14 +1,27 @@
 package org.mole.tracer.watcher;
 
+import com.lmax.disruptor.EventTranslatorOneArg;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.SleepingWaitStrategy;
+import com.lmax.disruptor.dsl.Disruptor;
+import com.lmax.disruptor.dsl.ProducerType;
+import internal.io.netty.buffer.ByteBuf;
+import internal.io.netty.buffer.PooledByteBufAllocator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.mole.tracer.consumer.kcp.KcpClient;
+import org.mole.tracer.consumer.kcp.TracerKCPClient;
 import org.mole.tracer.context.TracerContext;
+import org.mole.tracer.dto.MsgEvent;
 import org.mole.tracer.plugins.TraceHelper;
 import org.mole.tracer.utils.SimpleLoggerManager;
 
+import java.net.InetSocketAddress;
 import java.util.Objects;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Created by k3a
@@ -26,6 +39,11 @@ public enum WatcherMediator {
 
     private static final Logger LOGGER = LogManager.getLogger(WatcherMediator.class);
 
+    private static KcpClient kcpClient;
+
+    private static final EventTranslatorOneArg<MsgEvent, String> TRANSLATOR = (event, seq, str) -> event.setMsg(str);
+
+    private static RingBuffer<MsgEvent> ringBuffer;
 
     public static void init(TracerContext _context) {
         if (!isInit.compareAndSet(false, true)) {
@@ -34,6 +52,19 @@ public enum WatcherMediator {
         Objects.requireNonNull(_context, "context can not be null");
         context = _context;
 
+        if ((context.config.getRecordMode() & 2) != 0) {
+            // todo multi collector node
+            kcpClient = new TracerKCPClient();
+            kcpClient.noDelay(1, 20, 2, 1);
+            kcpClient.setMinRto(10);
+            kcpClient.wndSize(32, 32);
+            kcpClient.setTimeout(10 * 1000);
+            kcpClient.setMtu(1400);
+            //todo handle args
+            kcpClient.connect(new InetSocketAddress("localhost", 2222));
+            kcpClient.start();
+        }
+
         try {
             final Class<?> clazz = Class.forName(_context.config._helperClass);
             traceHelper = (TraceHelper) clazz.newInstance();
@@ -41,6 +72,36 @@ public enum WatcherMediator {
             SimpleLoggerManager.logFullStackTrace(e);
         }
 
+        //todo handle config
+        final Disruptor<MsgEvent> disruptor = new Disruptor<>(MsgEvent::new, 1024 * 1024 * 16, new ThreadFactory() {
+            private final AtomicInteger poolNumber = new AtomicInteger(1);
+
+            @Override
+            public Thread newThread(@SuppressWarnings("NullableProblems") Runnable r) {
+                Thread t = new Thread(r, "mole-disruptor-" + poolNumber.getAndIncrement());
+                t.setDaemon(true);
+                t.setPriority(Thread.NORM_PRIORITY);
+                return t;
+            }
+        }, ProducerType.MULTI, new SleepingWaitStrategy());
+
+        disruptor.handleEventsWith((event, seq, end) -> {
+            final String record = event.getMsg();
+            if (kcpClient != null && kcpClient.isRunning()) {
+                ByteBuf bb = PooledByteBufAllocator.DEFAULT.buffer(1500);
+                for (int i = 0; i < record.length(); i++) {
+                    bb.writeChar(record.charAt(i));
+                }
+                if (!kcpClient.send(bb)) {
+                    LOGGER.info(record);
+                }
+            } else {
+                LOGGER.info(record);
+            }
+        });
+
+        disruptor.start();
+        ringBuffer = disruptor.getRingBuffer();
     }
 
     /**
@@ -55,8 +116,6 @@ public enum WatcherMediator {
             // maybe not init yet
             SimpleLoggerManager.error("WatcherMediator maybe not init yet!");
             SimpleLoggerManager.logFullStackTrace(e);
-        } catch (Throwable e) {
-            SimpleLoggerManager.logFullStackTrace(e);
         }
         return false;
     }
@@ -67,10 +126,9 @@ public enum WatcherMediator {
      * <p>
      * <p>
      * extra format:
-     * String       String        Thread           Long         String String
-     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     * | methodName | methodDesc | currentThread| currentTimeMills | trace | span |
-     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     * | methodName(String) | methodDesc(String) | currentThread(Thread)| currentTimeMills(Long) | trace(Object) | span(Object) |method args(Object) |duration(Long,not finished)|
+     * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      * <p>
      * args format:
      * <p>
@@ -79,87 +137,9 @@ public enum WatcherMediator {
      * when args is a primitive type array ,the watched method is vararg and receive primitive type args
      */
     @SuppressWarnings("unused")
-    public static void doRecord(Object extra[], Object args) {
+    public static void doRecord(String record) {
         try {
-            final String separator = context.config._separator;
-
-            final StringBuilder sb = new StringBuilder();
-            // handle extra
-            if (extra != null) {
-                for (int i = 0; i < extra.length; i++) {
-                    switch (i) {
-                        case 0://methodName
-                        case 1://methodDesc
-                            if (extra[i] != null) {
-                                sb.append((String) extra[i]).append(separator);
-                            }
-                            break;
-                        case 2://Thread
-                            if (extra[i] != null) {
-                                sb.append(((Thread) extra[i]).getName()).append(separator);
-                            }
-                            break;
-                        case 3://timemills
-                            if (extra[i] != null) {
-                                sb.append(((Long) extra[i]).toString()).append(separator);
-                            }
-                            break;
-                        case 4://traceId
-                        case 5://spanId
-                            sb.append(extra[i]).append(separator);
-                            break;
-                        //todo handle duration
-                    }
-                }
-            }
-
-            // use an extra _separator to separate extra info and method args
-            sb.append(separator);
-
-            //handle method args
-            if (args == null) {
-                sb.append("null").append(separator);
-            } else if (args instanceof Object[]) {
-                for (int i = 0; i < ((Object[]) args).length; i++) {
-                    sb.append(String.valueOf(((Object[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof boolean[]) {
-                for (int i = 0; i < ((boolean[]) args).length; i++) {
-                    sb.append(String.valueOf(((boolean[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof byte[]) {
-                for (int i = 0; i < ((byte[]) args).length; i++) {
-                    sb.append(String.valueOf(((byte[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof short[]) {
-                for (int i = 0; i < ((short[]) args).length; i++) {
-                    sb.append(String.valueOf(((short[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof int[]) {
-                for (int i = 0; i < ((int[]) args).length; i++) {
-                    sb.append(String.valueOf(((int[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof char[]) {
-                for (int i = 0; i < ((char[]) args).length; i++) {
-                    sb.append(String.valueOf(((char[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof float[]) {
-                for (int i = 0; i < ((float[]) args).length; i++) {
-                    sb.append(String.valueOf(((float[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof long[]) {
-                for (int i = 0; i < ((long[]) args).length; i++) {
-                    sb.append(String.valueOf(((long[]) args)[i])).append(separator);
-                }
-            } else if (args instanceof double[]) {
-                for (int i = 0; i < ((double[]) args).length; i++) {
-                    sb.append(String.valueOf(((double[]) args)[i])).append(separator);
-                }
-            } else {
-                sb.append(args).append(separator);
-            }
-            //send or write to disk
-            LOGGER.info(sb.toString());
+            ringBuffer.publishEvent(TRANSLATOR, record);
         } catch (Throwable e) {
             SimpleLoggerManager.logFullStackTrace(e);
         }

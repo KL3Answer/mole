@@ -7,20 +7,27 @@ tracer:
     async: false
     # define how to separate info (String) collected
     separator: '|'
+    # separator method args
+    argsSeparator: '&'
     # which extra info need to be collected from runtime
     recordField:
     - methodName
     - methodDesc
     - currentThread
     - currentTimeMills
-    - traceId
-    - spanId
+    #    - traceId
+    #    - spanId
+    - duration
     # record method args(use toString method)
-    - args
+    - methodArgs
     recordMode:
       # use log4j2      
       log:
         dir: /home/k3a/Downloads
+      # use kcp
+      kcp:
+        host: localhost
+        port: 2222
     # helper class must implement org.mole.tracer.plugins.TraceHelper(this class is used to generate trace id and span id)
     helperClass: org.k3a.TestTraceHelper
     # define watched methods by setting class name(you can also define watched methods by setting annotation,when names and annotation are both set,names will be used)
@@ -33,7 +40,7 @@ tracer:
         spanClass: java.lang.Object
       # another method '.' as wildcard(match all method with this name , no matter what args )
       org.k3a.Bob#doSomething(.):
-        traceClass: java.util.Map
+        traceClass: int
         spanClass: java.util.List
     # you can also use annotation to mark methods
     annotation:
