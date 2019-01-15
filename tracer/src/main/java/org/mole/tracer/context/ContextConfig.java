@@ -98,7 +98,7 @@ public class ContextConfig {
         this.genS = genS;
 
         //_recordMode
-        //todo handle kcp argus
+        //todo handle kcp args
         final Map<String, Object> recordMode = getMapFromMap(config, tracer.name(), watcher.name(), ConfigKey.recordMode.name());
         if (recordMode == null || !recordMode.containsKey(log.name())) {
             throw new IllegalArgumentException("recordMode can not be null");
@@ -224,8 +224,11 @@ public class ContextConfig {
         recordMode, log, dir, kcp, argsSeparator
     }
 
+    /**
+     * do not change the sequence
+     */
     public enum ConfigValue {
-        methodName, methodDesc, currentThread, currentTimeMills, traceId, spanId, duration, methodArgs
+        methodName, methodDesc, currentThread, currentTimeMills, traceId, spanId, methodArgs, duration
     }
 
 }

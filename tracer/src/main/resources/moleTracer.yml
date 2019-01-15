@@ -15,8 +15,8 @@ tracer:
     - methodDesc
     - currentThread
     - currentTimeMills
-    - traceId
-    - spanId
+    #    - traceId
+    #    - spanId
     - duration
     # record method args(use toString method)
     - methodArgs

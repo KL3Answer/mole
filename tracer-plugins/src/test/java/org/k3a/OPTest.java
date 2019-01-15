@@ -1,5 +1,8 @@
 package org.k3a;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -14,42 +17,238 @@ import java.util.concurrent.TimeUnit;
  */
 public class OPTest {
 
-    public static void main(String[] args) {
+    private static final Logger LOGGER = LogManager.getLogger("org.mole.tracer.watcher.WatcherMediator");
 
+    public static void main(String[] args) throws InterruptedException {
+//        test01();//236763666
+//        test02();//222148329
+//        test03();//247942389
+
+//        multiThreadTest01();//2833345854
+//        multiThreadTest02();//2286824767
+//        multiThreadTest03();//699917899
+    }
+
+    private static void test01() {
+        final HashMap<String, String> hashMap = new HashMap<String, String>() {{
+            put("spanId", "1233213");
+        }};
+        final Foo foo = new Foo();
+
+        long count = 100_1000;
+
+        while (count-- > 0) {
+            foo.doSomething(1.2D, Arrays.asList(hashMap, 2, 5, 6, false), 1, 2, 3, 4, 5, 3.1D, 7);
+        }
+
+
+        count = 100_000;
+        long start = System.nanoTime();
+        while (count-- > 0) {
+            foo.doSomething(1.2D, Arrays.asList(hashMap, 2, 5, 6, false), 1, 2, 3, 4, 5, 3.1D, 7);
+        }
+        long mid = System.nanoTime();
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println(mid - start + "\n==append==\n");
+    }
+
+    private static void test02() {
+        final ExecutorService pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>(), new ThreadPoolExecutor.CallerRunsPolicy());
+        final HashMap<String, String> hashMap = new HashMap<String, String>() {{
+            put("spanId", "1233213");
+        }};
+
+        long count = 100_1000;
+        while (count-- > 0) {
+            final String sd = "" + 1.2D + Arrays.asList(hashMap, 2, 5, 6, false) + 1 + 2 + 3 + 4 + 5 + 3.1D + 7;
+            pool.execute(() -> {
+                LOGGER.info(sd);
+            });
+        }
+
+
+        count = 100_000;
+        long start = System.nanoTime();
+        while (count-- > 0) {
+            final String sd = "" + 1.2D + Arrays.asList(hashMap, 2, 5, 6, false) + 1 + 2 + 3 + 4 + 5 + 3.1D + 7;
+            pool.execute(() -> {
+                LOGGER.info(sd);
+            });
+        }
+        long mid = System.nanoTime();
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println(mid - start + "\n==async==\n");
+
+    }
+
+
+    private static void test03() {
 
         final HashMap<String, String> hashMap = new HashMap<String, String>() {{
             put("spanId", "1233213");
         }};
 
         final Bob bob = new Bob();
+
+        long count = 100_000;
+        while (count-- > 0) {
+            bob.doSomething(1.2D, Arrays.asList(hashMap, 2, 5, 6, false), 1, 2, 3, 4, 5, 3.1D, 7);
+        }
+
+        count = 100_000;
+        long start = System.nanoTime();
+        while (count-- > 0) {
+            bob.doSomething(1.2D, Arrays.asList(hashMap, 2, 5, 6, false), 1, 2, 3, 4, 5, 3.1D, 7);
+        }
+        long mid = System.nanoTime();
+
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println(mid - start + "\n==disruptor==\n");
+    }
+
+    private static void multiThreadTest01() throws InterruptedException {
+        final HashMap<String, String> hashMap = new HashMap<String, String>() {{
+            put("spanId", "1233213");
+        }};
         final Foo foo = new Foo();
-        final ExecutorService pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS,
+
+        final ExecutorService pool = new ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS,
                 new LinkedBlockingQueue<Runnable>(), new ThreadPoolExecutor.CallerRunsPolicy());
 
 
-        while (true) {
-//            Thread.sleep(100);
-            final long start = System.nanoTime();
-            bob.doSomething(1.2D, Arrays.asList(hashMap, 2, 5, 6, false), 1, 2, 3, 4, 5, 3.1D, 7);
-            final long mid = System.nanoTime();
 
+        long count = 100_1000;
 
-            final long mid1 = System.nanoTime();
-            foo.doSomething(1.2D, Arrays.asList(hashMap, 2, 5, 6, false), 1, 2, 3, 4, 5, 3.1D, 7);
-            final long l = System.nanoTime() - mid1;
-
-
-            final long a = System.nanoTime();
-            final String sd = "" + 1.2D + Arrays.asList(hashMap, 2, 5, 6, false) + 1 + 2 + 3 + 4 + 5 + 3.1D + 7;
+        while (count-- > 0) {
             pool.execute(() -> {
-//                System.out.print(sd);
+                foo.doSomething(1.2D, Arrays.asList(hashMap, 2, 5, 6, false), 1, 2, 3, 4, 5, 3.1D, 7);
             });
-            final long b = System.nanoTime() - a;
-
-            System.out.println(mid - start + "|" + l + "|" + b);
-//
         }
 
+        count = 100_000;
+        long start = System.nanoTime();
+        while (count-- > 0) {
+            pool.execute(() -> {
+                foo.doSomething(1.2D, Arrays.asList(hashMap, 2, 5, 6, false), 1, 2, 3, 4, 5, 3.1D, 7);
+            });
+        }
+
+        pool.shutdown();
+        pool.awaitTermination(1,TimeUnit.HOURS);
+
+        long mid = System.nanoTime();
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println(mid - start + "\n==append==\n");
+    }
+
+    private static void multiThreadTest02() throws InterruptedException {
+        final ExecutorService pool = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>(), new ThreadPoolExecutor.CallerRunsPolicy());
+        final HashMap<String, String> hashMap = new HashMap<String, String>() {{
+            put("spanId", "1233213");
+        }};
+
+        final ExecutorService ex = new ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>(), new ThreadPoolExecutor.CallerRunsPolicy());
+
+        long count = 100_1000;
+        while (count-- > 0) {
+            ex.execute(() -> {
+                final String sd = "" + 1.2D + Arrays.asList(hashMap, 2, 5, 6, false) + 1 + 2 + 3 + 4 + 5 + 3.1D + 7;
+                pool.execute(() -> {
+                    LOGGER.info(sd);
+                });
+            });
+        }
+
+
+        count = 100_000;
+        long start = System.nanoTime();
+        while (count-- > 0) {
+            ex.execute(() -> {
+                final String sd = "" + 1.2D + Arrays.asList(hashMap, 2, 5, 6, false) + 1 + 2 + 3 + 4 + 5 + 3.1D + 7;
+                pool.execute(() -> {
+                    LOGGER.info(sd);
+                });
+            });
+        }
+
+        ex.shutdown();
+        ex.awaitTermination(1,TimeUnit.HOURS);
+        long mid = System.nanoTime();
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println(mid - start + "\n==async==\n");
+    }
+
+
+    private static void multiThreadTest03() throws InterruptedException {
+        final HashMap<String, String> hashMap = new HashMap<String, String>() {{
+            put("spanId", "1233213");
+        }};
+
+        final ExecutorService pool = new ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS,
+                new LinkedBlockingQueue<Runnable>(), new ThreadPoolExecutor.CallerRunsPolicy());
+
+        final Bob bob = new Bob();
+
+        long count = 100_000;
+        while (count-- > 0) {
+            pool.execute(() -> {
+                bob.doSomething(1.2D, Arrays.asList(hashMap, 2, 5, 6, false), 1, 2, 3, 4, 5, 3.1D, 7);
+            });
+        }
+
+        count = 100_000;
+        long start = System.nanoTime();
+        while (count-- > 0) {
+            pool.execute(() -> {
+                bob.doSomething(1.2D, Arrays.asList(hashMap, 2, 5, 6, false), 1, 2, 3, 4, 5, 3.1D, 7);
+            });
+        }
+        pool.shutdown();
+        pool.awaitTermination(1,TimeUnit.HOURS);
+
+        long mid = System.nanoTime();
+
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println("\n================");
+        System.out.println(mid - start + "\n==disruptor==\n");
     }
 
     static class Foo {
@@ -67,53 +266,8 @@ public class OPTest {
                     .append(Thread.currentThread()).append('|')
                     .append(System.currentTimeMillis()).append('|')
                     .append("doSomething").append('|');
-            System.out.print("");
-//            LOGGER.info(sb.toString());
+            LOGGER.info(sb);
         }
-
-    }
-
-}
-
-class Bar {
-
-    public void randomMethod(Object... obj) {
-        long start = -1;
-
-        if (needRecord()) {
-            start = System.currentTimeMillis();
-            methodArgs2Str(obj);
-            doRecord(obj);
-        }
-
-        try {
-
-        } finally {
-            doRecord(new Object[]{1, 2});
-        }
-    }
-
-    private static String methodArgs2Str(Object... obj) {
-        return "";
-    }
-
-    public void randomMethod2(Object... obj) {
-        if (needRecord()) {
-            doRecord(obj);
-        }
-
-    }
-
-
-    private static String getStr(Object... obj) {
-        return "";
-    }
-
-    private static boolean needRecord() {
-        return true;
-    }
-
-    private static void doRecord(Object... object) {
 
     }
 

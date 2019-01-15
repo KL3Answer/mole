@@ -1,5 +1,10 @@
 package org.mole.tracer.watcher;
 
+import com.lmax.disruptor.EventTranslatorOneArg;
+import com.lmax.disruptor.RingBuffer;
+import com.lmax.disruptor.SleepingWaitStrategy;
+import com.lmax.disruptor.dsl.Disruptor;
+import com.lmax.disruptor.dsl.ProducerType;
 import internal.io.netty.buffer.ByteBuf;
 import internal.io.netty.buffer.PooledByteBufAllocator;
 import org.apache.logging.log4j.LogManager;
@@ -7,15 +12,16 @@ import org.apache.logging.log4j.Logger;
 import org.mole.tracer.consumer.kcp.KcpClient;
 import org.mole.tracer.consumer.kcp.TracerKCPClient;
 import org.mole.tracer.context.TracerContext;
+import org.mole.tracer.dto.MsgEvent;
 import org.mole.tracer.plugins.TraceHelper;
 import org.mole.tracer.utils.SimpleLoggerManager;
 
 import java.net.InetSocketAddress;
 import java.util.Objects;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import static org.mole.tracer.context.ContextConfig.ConfigValue.methodArgs;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Created by k3a
@@ -33,12 +39,11 @@ public enum WatcherMediator {
 
     private static final Logger LOGGER = LogManager.getLogger(WatcherMediator.class);
 
-    private static final ThreadLocal<StringBuilder> SBTL = ThreadLocal.withInitial(StringBuilder::new);
-
     private static KcpClient kcpClient;
 
-    private static String separator;
-    private static String argsSeparator;
+    private static final EventTranslatorOneArg<MsgEvent, String> TRANSLATOR = (event, seq, str) -> event.setMsg(str);
+
+    private static RingBuffer<MsgEvent> ringBuffer;
 
     public static void init(TracerContext _context) {
         if (!isInit.compareAndSet(false, true)) {
@@ -67,10 +72,36 @@ public enum WatcherMediator {
             SimpleLoggerManager.logFullStackTrace(e);
         }
 
-        //separators
-        separator = _context.config.get_separator();
-        argsSeparator = _context.config.get_argsSeparator();
+        //todo handle config
+        final Disruptor<MsgEvent> disruptor = new Disruptor<>(MsgEvent::new, 1024 * 1024 * 16, new ThreadFactory() {
+            private final AtomicInteger poolNumber = new AtomicInteger(1);
 
+            @Override
+            public Thread newThread(@SuppressWarnings("NullableProblems") Runnable r) {
+                Thread t = new Thread(r, "mole-disruptor-" + poolNumber.getAndIncrement());
+                t.setDaemon(true);
+                t.setPriority(Thread.NORM_PRIORITY);
+                return t;
+            }
+        }, ProducerType.MULTI, new SleepingWaitStrategy());
+
+        disruptor.handleEventsWith((event, seq, end) -> {
+            final String record = event.getMsg();
+            if (kcpClient != null && kcpClient.isRunning()) {
+                ByteBuf bb = PooledByteBufAllocator.DEFAULT.buffer(1500);
+                for (int i = 0; i < record.length(); i++) {
+                    bb.writeChar(record.charAt(i));
+                }
+                if (!kcpClient.send(bb)) {
+                    LOGGER.info(record);
+                }
+            } else {
+                LOGGER.info(record);
+            }
+        });
+
+        disruptor.start();
+        ringBuffer = disruptor.getRingBuffer();
     }
 
     /**
@@ -85,8 +116,6 @@ public enum WatcherMediator {
             // maybe not init yet
             SimpleLoggerManager.error("WatcherMediator maybe not init yet!");
             SimpleLoggerManager.logFullStackTrace(e);
-        } catch (Throwable e) {
-            SimpleLoggerManager.logFullStackTrace(e);
         }
         return false;
     }
@@ -98,7 +127,7 @@ public enum WatcherMediator {
      * <p>
      * extra format:
      * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     * | methodName(String) | methodDesc(String) | currentThread(Thread)| currentTimeMills(Long) | trace(Object) | span(Object) |duration(Long,not finished)|method args(Object) |
+     * | methodName(String) | methodDesc(String) | currentThread(Thread)| currentTimeMills(Long) | trace(Object) | span(Object) |method args(Object) |duration(Long,not finished)|
      * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      * <p>
      * args format:
@@ -108,106 +137,9 @@ public enum WatcherMediator {
      * when args is a primitive type array ,the watched method is vararg and receive primitive type args
      */
     @SuppressWarnings("unused")
-    public static void doRecord(Object extra[]) {
+    public static void doRecord(String record) {
         try {
-
-            final StringBuilder sb = new StringBuilder();
-            // handle extra
-            if (extra != null) {
-                for (int i = 0; i < extra.length; i++) {
-                    switch (i) {
-                        case 0://methodName
-                        case 1://methodDesc
-                            if (extra[i] != null) {
-                                sb.append((String) extra[i]).append(separator);
-                            }
-                            break;
-                        case 2://Thread
-                            if (extra[i] != null) {
-                                sb.append(((Thread) extra[i]).getName()).append(separator);
-                            }
-                            break;
-                        case 3://timemills
-                            if (extra[i] != null) {
-                                sb.append(((Long) extra[i]).toString()).append(separator);
-                            }
-                            break;
-                        case 4://traceId
-                        case 5://spanId
-                            if (extra[i] != null) {
-                                sb.append(extra[i]).append(separator);
-                            }
-                            break;
-                        case 6://duration
-                            //todo handle duration
-                            sb.append(separator);
-                            break;
-                        case 7:
-                            if (!context.config.getExtra().contains(methodArgs.name())) {
-                                continue;
-                            }
-                            //handle method args
-                            final Object args = extra[i];
-                            if (args == null) {
-                                sb.append("null").append(separator);
-                            } else if (args instanceof Object[]) {
-                                for (int j = 0; j < ((Object[]) args).length; j++) {
-                                    sb.append(((Object[]) args)[j]).append(argsSeparator);
-                                }
-                            } else if (args instanceof boolean[]) {
-                                for (int j = 0; j < ((boolean[]) args).length; j++) {
-                                    sb.append(Boolean.toString(((boolean[]) args)[j])).append(argsSeparator);
-                                }
-                            } else if (args instanceof byte[]) {
-                                for (int j = 0; j < ((byte[]) args).length; j++) {
-                                    sb.append(Integer.toString(((byte[]) args)[j])).append(argsSeparator);
-                                }
-                            } else if (args instanceof short[]) {
-                                for (int j = 0; j < ((short[]) args).length; j++) {
-                                    sb.append(Integer.toString(((byte[]) args)[j])).append(argsSeparator);
-                                }
-                            } else if (args instanceof int[]) {
-                                for (int j = 0; j < ((int[]) args).length; j++) {
-                                    sb.append(Integer.toString(((int[]) args)[j])).append(argsSeparator);
-                                }
-                            } else if (args instanceof char[]) {
-                                for (int j = 0; j < ((char[]) args).length; j++) {
-                                    sb.append(((char[]) args)[j]).append(argsSeparator);
-                                }
-                            } else if (args instanceof float[]) {
-                                for (int j = 0; j < ((float[]) args).length; j++) {
-                                    sb.append(String.valueOf(((float[]) args)[j])).append(argsSeparator);
-                                }
-                            } else if (args instanceof long[]) {
-                                for (int j = 0; j < ((long[]) args).length; j++) {
-                                    sb.append(Long.toString(((long[]) args)[j])).append(argsSeparator);
-                                }
-                            } else if (args instanceof double[]) {
-                                for (int j = 0; j < ((double[]) args).length; j++) {
-                                    sb.append(Double.toString(((double[]) args)[j])).append(argsSeparator);
-                                }
-                            } else {
-                                sb.append(args).append(separator);
-                            }
-                            break;
-                    }
-                }
-            }
-
-            final String rs = sb.toString();
-
-////            //send or write to disk
-            if (kcpClient != null && kcpClient.isRunning()) {
-                ByteBuf bb = PooledByteBufAllocator.DEFAULT.buffer(1500);
-                for (int i = 0; i < rs.length(); i++) {
-                    bb.writeChar(rs.charAt(i));
-                }
-                if (!kcpClient.send(bb)) {
-                    LOGGER.info(rs);
-                }
-            } else {
-                LOGGER.info(rs);
-            }
+            ringBuffer.publishEvent(TRANSLATOR, record);
         } catch (Throwable e) {
             SimpleLoggerManager.logFullStackTrace(e);
         }
