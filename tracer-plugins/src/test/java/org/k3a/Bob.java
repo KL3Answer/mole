@@ -16,35 +16,6 @@ public class Bob {
 
     }
 
-
-//    public void doSomething(String s, int a, float b, short d, char e,boolean f,boolean g,String v) {
-//    }
-
-//    public void doSomething(float s, int a, int b, int d, int e,int f,boolean g,String v,boolean io) {
-//    }
-
-//    public void doSomething(String s, int a, double b, float c, short d, char e, boolean f, long g, byte h) {
-//    }
-//
-//    public void doSomething(String s, int a, double b, float c, short d, char e[], boolean f, long g, byte h) {
-//    }
-//
-//    public void doSomething(String s, int a, double b, float c[], short d[], char e[], boolean f[], long[] g, byte[] h, Object o) {
-//    }
-
-    //    public void doSomething(Object... obj) {
-//        System.out.println("1212121");
-//    }
-//
-//    public static void doSomething(String a) {
-//
-//    }
-//
-//    public void doSomething(int... objects) {
-//    }
-//
-//    public void doSomething(String s, int a) {
-//    }
 }
 
 class Pro {
