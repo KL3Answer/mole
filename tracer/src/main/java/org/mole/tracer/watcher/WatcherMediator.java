@@ -127,7 +127,7 @@ public enum WatcherMediator {
      * <p>
      * extra format:
      * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-     * | methodName(String) | methodDesc(String) | currentThread(Thread)| currentTimeMills(Long) | trace(Object) | span(Object) |method args(Object) |duration(Long,not finished)|
+     * | methodName(String) | methodDesc(String) | currentThread(Thread)| currentTimeMills(Long) | traceId(String) | spanId(String) |method args(Object) |duration(Long,not finished)|
      * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
      * <p>
      * args format:
