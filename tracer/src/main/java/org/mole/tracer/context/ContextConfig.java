@@ -47,9 +47,7 @@ public class ContextConfig {
         //hot swap sample rate _separator
         FileObserver.get()
                 .register(path)
-                .onDelete(this::swap)
                 .onModify(this::swap)
-                .onCreate(this::swap)
                 .start();
     }
 
